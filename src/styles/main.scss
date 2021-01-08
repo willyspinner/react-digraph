@@ -125,15 +125,15 @@ $background-color: #f9f9f9;
     bottom: 30px;
     left: 15px;
     display: grid;
-    grid-template-columns: auto auto;
+    grid-template-columns: auto auto auto;
     grid-gap: 15px;
     align-items: center;
     user-select: none;
 
     > .slider-wrapper {
-      background-color: white;
+      background-color: $light-color;
       color: $primary-color;
-      border: solid 1px lightgray;
+      border: solid 1px $light-grey;
       padding: 6.5px;
       border-radius: 2px;
 
@@ -151,16 +151,56 @@ $background-color: #f9f9f9;
       }
     }
 
-    > .slider-button {
-      background-color: white;
+    > .slider-button, > .help-container>.help-button {
+      background-color: $light-color;
       fill: $primary-color;
-      border: solid 1px lightgray;
+      border: solid 1px $light-grey;
       outline: none;
       width: 31px;
       height: 31px;
       border-radius: 2px;
       cursor: pointer;
       margin: 0;
+    }
+
+    > .help-container {
+      position: relative;
+  
+      > .help-button {
+        > svg {
+          margin: 3px;
+        }
+
+        &.help-showing {
+          background-color: lighten($light-grey, 12%);
+        }
+      }
+  
+      > .help-menu {
+        background-color: $light-color;
+        border: solid 1px $light-grey;
+        position: absolute;
+        padding: 10px;
+        bottom: 0;
+        left: 31px;
+        width: 200px;
+
+        label {
+          font-weight: bold;
+        }
+
+        ul {
+          list-style-type:none;
+          padding: 0;
+          margin: 0;
+
+          li {
+            &:not(:last-child) {
+              margin-bottom: 5px;
+            }
+          }
+        }
+      }
     }
   }
 

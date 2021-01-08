@@ -221,9 +221,15 @@ type IGraphProps = {};
 type IGraphState = {
   graph: any,
   selected: any,
+  selectedNodes: null | INode[],
+  selectedEdges: null | IEdge[],
   totalNodes: number,
-  copiedNode: any,
+  copiedNode: null | INode,
+  copiedNodes: null | INode[],
+  copiedEdges: null | IEdge[],
   layoutEngineType?: LayoutEngineType,
+  allowMultiSelect: boolean,
+  showHelp: boolean,
 };
 
 class Graph extends React.Component<IGraphProps, IGraphState> {
@@ -234,10 +240,16 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
 
     this.state = {
       copiedNode: null,
+      copiedNodes: null,
+      copiedEdges: null,
       graph: sample,
       layoutEngineType: undefined,
       selected: null,
+      selectedNodes: null,
+      selectedEdges: null,
       totalNodes: sample.nodes.length,
+      allowMultiSelect: true,
+      showHelp: true,
     };
 
     this.GraphView = React.createRef();
@@ -343,6 +355,18 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
     this.setState({ selected: viewEdge });
   };
 
+  onSelectNodes = (selectedNodes: INode[]) => {
+    this.setState({
+      selectedNodes,
+    });
+  };
+
+  onSelectEdges = (selectedEdges: IEdge[]) => {
+    this.setState({
+      selectedEdges,
+    });
+  };
+
   // Updates the graph with a new node
   onCreateNode = (x: number, y: number) => {
     const graph = this.state.graph;
@@ -367,16 +391,10 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
 
   // Deletes a node from the graph
   onDeleteNode = (viewNode: INode, nodeId: string, nodeArr: INode[]) => {
+    // Note: onDeleteEdge is also called from react-digraph for connected nodes
     const graph = this.state.graph;
-    // Delete any connected edges
-    const newEdges = graph.edges.filter((edge, i) => {
-      return (
-        edge.source !== viewNode[NODE_KEY] && edge.target !== viewNode[NODE_KEY]
-      );
-    });
 
     graph.nodes = nodeArr;
-    graph.edges = newEdges;
 
     this.setState({ graph, selected: null });
   };
@@ -450,38 +468,123 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
   };
 
   onCopySelected = () => {
-    if (this.state.selected.source) {
+    const { selected, selectedNodes, selectedEdges } = this.state;
+
+    if (selected?.source) {
       console.warn('Cannot copy selected edges, try selecting a node instead.');
 
       return;
     }
 
-    const x = this.state.selected.x + 10;
-    const y = this.state.selected.y + 10;
-
-    this.setState({
-      copiedNode: { ...this.state.selected, x, y },
-    });
+    // Track the copied elements separately from other
+    // selected elements in a similar manner to how your OS works.
+    if (selectedNodes != null) {
+      this.setState({
+        copiedNodes: [...selectedNodes],
+        copiedEdges: [...selectedEdges],
+      });
+    } else {
+      this.setState({
+        copiedNode: { ...selected },
+      });
+    }
   };
 
   // Pastes the selected node to mouse position
-  onPasteSelected = (node: INode, mousePosition?: [number, number]) => {
-    const graph = this.state.graph;
+  onPasteSelected = (
+    // node parameter should be deprecated
+    // https://github.com/uber/react-digraph/issues/292
+    node: INode | null,
+    mousePosition?: [number, number]
+  ) => {
+    const { graph, copiedNode, copiedNodes, copiedEdges } = this.state;
+    const [mouseX, mouseY] = mousePosition || [copiedNode.x, copiedNode.y];
 
-    const newNode = {
-      ...node,
-      id: Date.now(),
-      x: mousePosition ? mousePosition[0] : node.x,
-      y: mousePosition ? mousePosition[1] : node.y,
-    };
+    if (copiedNodes == null && copiedNode !== null) {
+      // Paste a single node is only run if allowMultiSelect is false
+      const newNode = {
+        ...node,
+        id: Date.now(),
+        x: mousePosition ? mousePosition[0] : node.x,
+        y: mousePosition ? mousePosition[1] : node.y,
+      };
 
-    graph.nodes = [...graph.nodes, newNode];
-    this.forceUpdate();
+      graph.nodes = [...graph.nodes, newNode];
+
+      // Select the new node
+      this.setState({
+        selected: newNode,
+      });
+    } else if (copiedNodes !== null) {
+      // Paste multiple nodes is used if allowMultiSelect is true
+      let cornerX, cornerY;
+
+      copiedNodes.forEach(copiedNode => {
+        // find left-most node and record x position
+        if (cornerX == null || copiedNode.x < cornerX) {
+          cornerX = copiedNode.x;
+        }
+
+        // find top-most node and record y position
+        if (cornerY == null || copiedNode.y < cornerY) {
+          cornerY = copiedNode.y;
+        }
+      });
+
+      // Keep track of the mapping of old IDs to new IDs
+      // so we can recreate the edges
+      const newIDs = {};
+
+      // Every node position is relative to the top and left-most corner
+      const newNodes = copiedNodes.map(copiedNode => {
+        const x = mouseX + (copiedNode.x - cornerX);
+        const y = mouseY + (copiedNode.y - cornerY);
+        const id = `${copiedNode.id}_${Date.now()}`;
+
+        newIDs[copiedNode.id] = id;
+
+        return {
+          ...copiedNode,
+          id,
+          x,
+          y,
+        };
+      });
+
+      const newEdges = copiedEdges.map(copiedEdge => {
+        return {
+          ...copiedEdge,
+          source: newIDs[copiedEdge.source],
+          target: newIDs[copiedEdge.target],
+        };
+      });
+
+      graph.nodes = [...graph.nodes, ...newNodes];
+      graph.edges = [...graph.edges, ...newEdges];
+
+      // Select the new nodes and edges
+      this.setState({
+        selectedNodes: newNodes,
+        selectedEdges: newEdges,
+      });
+    }
   };
 
   handleChangeLayoutEngineType = (event: any) => {
     this.setState({
       layoutEngineType: (event.target.value: LayoutEngineType | 'None'),
+    });
+  };
+
+  handleMultiSelectChange = (event: any) => {
+    this.setState({
+      allowMultiSelect: event.target.checked,
+    });
+  };
+
+  handleShowHelpChange = (event: any) => {
+    this.setState({
+      showHelp: event.target.checked,
     });
   };
 
@@ -497,7 +600,13 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
 
   render() {
     const { nodes, edges } = this.state.graph;
-    const selected = this.state.selected;
+    const {
+      selected,
+      selectedNodes,
+      selectedEdges,
+      allowMultiSelect,
+      showHelp,
+    } = this.state;
     const { NodeTypes, NodeSubtypes, EdgeTypes } = GraphConfig;
 
     return (
@@ -532,17 +641,43 @@ class Graph extends React.Component<IGraphProps, IGraphState> {
               ))}
             </select>
           </div>
+          <div className="allow-multiselect">
+            <label>
+              Multiselect:
+              <input
+                type="checkbox"
+                onChange={this.handleMultiSelectChange}
+                checked={allowMultiSelect}
+              />
+            </label>
+          </div>
+          <div className="show-help">
+            <label>
+              Show Help:
+              <input
+                type="checkbox"
+                onChange={this.handleShowHelpChange}
+                checked={showHelp}
+              />
+            </label>
+          </div>
         </div>
         <div id="graph" style={{ height: 'calc(100% - 87px)' }}>
           <GraphView
             ref={el => (this.GraphView = el)}
+            allowMultiSelect={allowMultiSelect}
             nodeKey={NODE_KEY}
             nodes={nodes}
             edges={edges}
             selected={selected}
+            selectedNodes={selectedNodes}
+            selectedEdges={selectedEdges}
             nodeTypes={NodeTypes}
             nodeSubtypes={NodeSubtypes}
             edgeTypes={EdgeTypes}
+            showHelp={showHelp}
+            onSelectNodes={this.onSelectNodes}
+            onSelectEdges={this.onSelectEdges}
             onSelectNode={this.onSelectNode}
             onCreateNode={this.onCreateNode}
             onUpdateNode={this.onUpdateNode}

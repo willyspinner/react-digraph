@@ -19,19 +19,25 @@
   Zoom slider and zoom to fit controls for GraphView
 */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import Parse from 'html-react-parser';
+import classnames from 'classnames';
 import { DEFAULT_MAX_ZOOM, DEFAULT_MIN_ZOOM, SLIDER_STEPS } from '../constants';
 import { useZoomLevelToSliderValue } from '../hooks/useZoomLevelToSliderValue';
 import faExpand from '@fortawesome/fontawesome-free/svgs/solid/expand.svg';
+import faQuestion from '@fortawesome/fontawesome-free/svgs/solid/question.svg';
 
-const parsedIcon = Parse(faExpand); //  parse SVG once
-const ExpandIcon = () => parsedIcon; // convert SVG to react component
+const parsedExpandIcon = Parse(faExpand); //  parse SVG once
+const parsedQuestionIcon = Parse(faQuestion);
+const ExpandIcon = () => parsedExpandIcon; // convert SVG to react component
+const QuestionIcon = () => parsedQuestionIcon;
 
 type IGraphControlProps = {
   maxZoom?: number,
   minZoom?: number,
   zoomLevel: number,
+  showHelp?: boolean,
+  allowMultiSelect?: boolean,
   zoomToFit: (event: SyntheticMouseEvent<HTMLButtonElement>) => void,
   modifyZoom: (delta: number) => boolean,
 };
@@ -45,9 +51,14 @@ function GraphControls({
   maxZoom = DEFAULT_MAX_ZOOM,
   minZoom = DEFAULT_MIN_ZOOM,
   zoomLevel,
+  showHelp,
+  allowMultiSelect,
   zoomToFit,
   modifyZoom,
 }: IGraphControlProps) {
+  const [helpShowing, setHelpShowing] = useState(false);
+  const helpContainerRef = useRef();
+
   // Modify current zoom of graph-view
   const zoom = useCallback(
     (e: any) => {
@@ -62,9 +73,35 @@ function GraphControls({
     [minZoom, maxZoom, zoomLevel, modifyZoom]
   );
 
+  const handleDocumentClick = e => {
+    if (!helpContainerRef.current.contains(e.target)) {
+      setHelpShowing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showHelp) {
+      document.removeEventListener('click', handleDocumentClick);
+
+      return;
+    }
+
+    // subscribe event
+    document.addEventListener('click', handleDocumentClick);
+
+    return () => {
+      // unsubscribe event
+      document.removeEventListener('click', handleDocumentClick);
+    };
+  }, [showHelp]);
+
   const min = useZoomLevelToSliderValue(minZoom, minZoom, maxZoom);
   const max = useZoomLevelToSliderValue(maxZoom, minZoom, maxZoom);
   const value = useZoomLevelToSliderValue(zoomLevel, minZoom, maxZoom);
+
+  const helpButtonClassnames = classnames('help-button', {
+    'help-showing': helpShowing,
+  });
 
   return (
     <div className="graph-controls">
@@ -84,6 +121,36 @@ function GraphControls({
       <button type="button" className="slider-button" onMouseDown={zoomToFit}>
         <ExpandIcon />
       </button>
+      {showHelp && (
+        <div className="help-container" ref={helpContainerRef}>
+          <button
+            type="button"
+            className={helpButtonClassnames}
+            onMouseDown={() => setHelpShowing(!helpShowing)}
+          >
+            <QuestionIcon />
+          </button>
+          {helpShowing && (
+            <div className="help-menu">
+              <ul>
+                <li>
+                  <label>Create Node:</label> Shift+Click
+                </li>
+                <li>
+                  <label>Create Edge:</label> Shift+Click on node, drag mouse to
+                  target node
+                </li>
+                {allowMultiSelect && (
+                  <li>
+                    <label>Select Multiple Nodes:</label> [Ctrl/Cmd]+Shift+Click
+                    and drag
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
