@@ -86,6 +86,7 @@ class GraphView extends React.Component<IGraphViewProps, IGraphViewState> {
     zoomDur: 750,
     rotateEdgeHandle: true,
     centerNodeOnMove: true,
+    useShiftBackspace: false,
   };
 
   static getDerivedStateFromProps(
@@ -592,6 +593,7 @@ class GraphView extends React.Component<IGraphViewProps, IGraphViewState> {
     const {
       selected,
       disableBackspace,
+      useShiftBackspace,
       onUndo,
       onCopySelected,
       onPasteSelected,
@@ -611,7 +613,10 @@ class GraphView extends React.Component<IGraphViewProps, IGraphViewState> {
 
         break;
       case 'Backspace':
-        if (selectedNodeObj && !disableBackspace) {
+        /* eslint-disable no-case-declarations */
+        const shiftBackspaceOpt = !useShiftBackspace || d.shiftKey;
+
+        if (selectedNodeObj && !disableBackspace && shiftBackspaceOpt) {
           this.handleDelete(selectedNodeObj.node || selected);
         }
 
